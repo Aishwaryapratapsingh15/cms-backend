@@ -5,11 +5,251 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// NOTE:
+// This is a starter production schema.
+// It includes RBAC foundation and core CMS entities.
+// Extend as needed.
+
+enum BlogStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+  ARCHIVED
+}
+
+model Role {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+
+  users       User[]
+  permissions RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+
+  roles RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model User {
+  id     String @id @default(uuid())
+  roleId String
+
+  fullName String
+  email    String @unique
+  password String
+
+  designation String?
+  shortBio    String?
+
+  linkedin String?
+  twitter  String?
+
+  avatarMediaId String?
+
+  isActive  Boolean   @default(true)
+  lastLogin DateTime?
+
+  role Role @relation(fields: [roleId], references: [id])
+
+  blogs         Blog[]
+  refreshTokens RefreshToken[]
+  uploadedMedia Media[]        @relation("UploadedMedia")
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+  blogVersions BlogVersion[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model Media {
+  id String @id @default(uuid())
+
+  originalName String
+  storedName   String
+  s3Key        String
+  mimeType     String
+  fileSize     BigInt
+
+  width  Int?
+  height Int?
+
+  altText String?
+  caption String?
+
+  uploadedById String
+  uploadedBy   User   @relation("UploadedMedia", fields: [uploadedById], references: [id])
+
+  featuredBlogs Blog[] @relation("FeaturedImage")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("media")
+}
+
+model Blog {
+  id String @id @default(uuid())
+
+  authorId        String
+  featuredMediaId String?
+
+  title   String
+  slug    String  @unique
+  excerpt String?
+  content String
+
+  status BlogStatus @default(DRAFT)
+
+  seoTitle       String?
+  seoDescription String?
+  canonicalUrl   String?
+
+  isFeatured    Boolean @default(false)
+  allowComments Boolean @default(true)
+
+  readingTime Int?
+  views       Int  @default(0)
+
+  publishedAt DateTime?
+  scheduledAt DateTime?
+  archivedAt  DateTime?
+
+  author        User   @relation(fields: [authorId], references: [id])
+  featuredMedia Media? @relation("FeaturedImage", fields: [featuredMediaId], references: [id])
+
+  categories BlogCategory[]
+  tags       BlogTag[]
+  versions   BlogVersion[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@map("blogs")
+}
+
+model Category {
+  id          String  @id @default(uuid())
+  name        String
+  slug        String  @unique
+  description String?
+  color       String?
+
+  blogs BlogCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("categories")
+}
+
+model Tag {
+  id   String @id @default(uuid())
+  name String
+  slug String @unique
+
+  blogs BlogTag[]
+
+  createdAt DateTime @default(now())
+
+  @@map("tags")
+}
+
+model BlogCategory {
+  blogId     String
+  categoryId String
+
+  blog     Blog     @relation(fields: [blogId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@id([blogId, categoryId])
+  @@map("blog_categories")
+}
+
+model BlogTag {
+  blogId String
+  tagId  String
+
+  blog Blog @relation(fields: [blogId], references: [id])
+  tag  Tag  @relation(fields: [tagId], references: [id])
+
+  @@id([blogId, tagId])
+  @@map("blog_tags")
+}
+
+model BlogVersion {
+  id         String @id @default(uuid())
+  blogId     String
+  editedById String
+
+  title   String
+  excerpt String?
+  content String
+
+  blog     Blog @relation(fields: [blogId], references: [id])
+  editedBy User @relation(fields: [editedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("blog_versions")
+}
+
+model Setting {
+  id          String  @id @default(uuid())
+  key         String  @unique
+  value       Json
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
 }
