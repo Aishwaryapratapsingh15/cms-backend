@@ -92,6 +92,7 @@ model User {
   updatedAt    DateTime      @updatedAt
   deletedAt    DateTime?
   blogVersions BlogVersion[]
+  auditLogs    AuditLog[]
 
   @@map("users")
 }
@@ -99,7 +100,7 @@ model User {
 model RefreshToken {
   id        String   @id @default(uuid())
   userId    String
-  tokenHash String
+  tokenHash String   @unique
   expiresAt DateTime
 
   user User @relation(fields: [userId], references: [id])
@@ -240,6 +241,23 @@ model BlogVersion {
   createdAt DateTime @default(now())
 
   @@map("blog_versions")
+}
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  action   String
+  entity   String
+  entityId String?
+
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
 }
 
 model Setting {
