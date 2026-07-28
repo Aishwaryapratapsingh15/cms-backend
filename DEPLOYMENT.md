@@ -7,7 +7,7 @@
   user and runs DB migrations automatically on container start.
 - `docker-entrypoint.sh` — runs `prisma migrate deploy`, then starts the app.
 - `docker-compose.yml` — `postgres` (Postgres 16) + `app` services on an internal
-  Docker network. The app container only binds to `127.0.0.1:3000` — it is **not**
+  Docker network. The app container only binds to `127.0.0.1:3011` — it is **not**
   exposed to the internet directly; Nginx on the host is the public-facing reverse
   proxy.
 - `.env.example` — template for the real `.env` file (never commit `.env`).
@@ -65,7 +65,7 @@ docker compose exec app node dist/seed/seed.js
 `POST /users` only works once, while the users table is empty:
 
 ```bash
-curl -X POST http://127.0.0.1:3000/api/v1/users \
+curl -X POST http://127.0.0.1:3011/api/v1/users \
   -H "Content-Type: application/json" \
   -d '{"fullName":"Admin","email":"admin@example.com","password":"ChangeMe123!"}'
 ```
@@ -76,7 +76,7 @@ curl -X POST http://127.0.0.1:3000/api/v1/users \
 
 ```bash
 sudo cp deploy/nginx/cms-backend.conf /etc/nginx/sites-available/cms-backend.conf
-sudo nano /etc/nginx/sites-available/cms-backend.conf   # replace api.yourdomain.com
+sudo nano /etc/nginx/sites-available/cms-backend.conf   # server_name already set to eiceapi.eicetechnology.com
 sudo ln -s /etc/nginx/sites-available/cms-backend.conf /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl reload nginx
@@ -85,7 +85,7 @@ sudo systemctl reload nginx
 ## 7. HTTPS
 
 ```bash
-sudo certbot --nginx -d api.yourdomain.com
+sudo certbot --nginx -d eiceapi.eicetechnology.com
 ```
 
 Certbot edits the site config in place to add the SSL block and sets up auto-renewal.
@@ -93,11 +93,11 @@ Certbot edits the site config in place to add the SSL block and sets up auto-ren
 ## 8. Verify
 
 ```bash
-curl https://api.yourdomain.com/api/v1/health
+curl https://eiceapi.eicetechnology.com/api/v1/health
 # {"success":true,"message":"Service is healthy","data":{"status":"ok",...}}
 ```
 
-Swagger docs: `https://api.yourdomain.com/docs`
+Swagger docs: `https://eiceapi.eicetechnology.com/docs`
 
 ---
 

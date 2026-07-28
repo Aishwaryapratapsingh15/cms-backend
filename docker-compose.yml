@@ -30,7 +30,7 @@ services:
         condition: service_healthy
     ports:
       # bind only to localhost — nginx on the host reverse-proxies to this port
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3011:3000"
     networks:
       - cms-internal
 
