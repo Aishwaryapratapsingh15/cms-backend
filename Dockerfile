@@ -18,6 +18,11 @@ RUN npm install
 
 COPY . .
 
+# prisma.config.ts requires DATABASE_URL to be set even just to generate the
+# client (no real DB connection happens here) — dummy value, build-stage only,
+# never carried into the runtime image below.
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+
 # Generates the Linux query engine for this container (a Windows-generated
 # client from the host would not run here)
 RUN npx prisma generate
