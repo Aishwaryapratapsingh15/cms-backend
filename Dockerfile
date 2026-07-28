@@ -11,7 +11,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 
-RUN npm ci
+# npm ci was rejecting Windows-generated package-lock.json here (cross-platform
+# optional-dependency drift, e.g. @emnapi/*); npm install reconciles instead of
+# hard-failing, and still uses the lock file as its base.
+RUN npm install
 
 COPY . .
 
