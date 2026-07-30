@@ -160,6 +160,41 @@ describe('BlogsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('allows a DRAFT with no content at all', async () => {
+      prisma.blog.findUnique.mockResolvedValue(null);
+      prisma.blog.create.mockResolvedValue(withRelations({ content: '' }));
+
+      await expect(
+        service.create({ title: dto.title }, actor),
+      ).resolves.toBeDefined();
+
+      expect(prisma.blog.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ content: '' }) }),
+      );
+    });
+
+    it('throws BadRequestException when publishing with no content', async () => {
+      prisma.blog.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.create({ title: dto.title, status: BlogStatus.PUBLISHED }, actor),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.blog.create).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException when scheduling with only whitespace content', async () => {
+      prisma.blog.findUnique.mockResolvedValue(null);
+      const futureDate = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+      await expect(
+        service.create(
+          { title: dto.title, content: '   ', status: BlogStatus.SCHEDULED, scheduledAt: futureDate },
+          actor,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.blog.create).not.toHaveBeenCalled();
+    });
+
     it('sets publishedAt when status is PUBLISHED', async () => {
       prisma.blog.findUnique.mockResolvedValue(null);
       prisma.blog.create.mockResolvedValue(withRelations());
@@ -394,6 +429,58 @@ describe('BlogsService', () => {
     });
   });
 
+  describe('publishDueScheduledBlogs', () => {
+    it('queries only due, non-deleted SCHEDULED blogs', async () => {
+      prisma.blog.findMany.mockResolvedValue([]);
+
+      await service.publishDueScheduledBlogs();
+
+      expect(prisma.blog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            status: BlogStatus.SCHEDULED,
+            scheduledAt: { lte: expect.any(Date) },
+            deletedAt: null,
+          },
+        }),
+      );
+    });
+
+    it('publishes each due blog, using its own scheduledAt as publishedAt', async () => {
+      const scheduledAt = new Date('2026-07-30T09:00:00.000Z');
+      prisma.blog.findMany.mockResolvedValue([
+        { id: 'blog-1', slug: 'first-post', scheduledAt },
+        { id: 'blog-2', slug: 'second-post', scheduledAt },
+      ]);
+      prisma.blog.update.mockImplementation(({ where }) =>
+        Promise.resolve({ id: where.id, slug: `${where.id}-slug` }),
+      );
+
+      const result = await service.publishDueScheduledBlogs();
+
+      expect(prisma.blog.update).toHaveBeenCalledTimes(2);
+      expect(prisma.blog.update).toHaveBeenCalledWith({
+        where: { id: 'blog-1' },
+        data: {
+          status: BlogStatus.PUBLISHED,
+          publishedAt: scheduledAt,
+          scheduledAt: null,
+        },
+        select: { id: true, slug: true },
+      });
+      expect(result).toHaveLength(2);
+    });
+
+    it('does nothing when no scheduled blogs are due', async () => {
+      prisma.blog.findMany.mockResolvedValue([]);
+
+      const result = await service.publishDueScheduledBlogs();
+
+      expect(prisma.blog.update).not.toHaveBeenCalled();
+      expect(result).toEqual([]);
+    });
+  });
+
   describe('findOne', () => {
     it('throws NotFoundException when missing', async () => {
       prisma.blog.findFirst.mockResolvedValue(null);
@@ -493,6 +580,30 @@ describe('BlogsService', () => {
       await expect(
         service.update(existing.id, { status: BlogStatus.SCHEDULED }, actor),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException when publishing a draft that has no content', async () => {
+      const existing = withRelations({ content: '' });
+      prisma.blog.findFirst.mockResolvedValue(existing);
+
+      await expect(
+        service.update(existing.id, { status: BlogStatus.PUBLISHED }, actor),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.blog.update).not.toHaveBeenCalled();
+    });
+
+    it('allows publishing when new content is supplied in the same update', async () => {
+      const existing = withRelations({ content: '' });
+      prisma.blog.findFirst.mockResolvedValue(existing);
+      prisma.blog.update.mockResolvedValue(withRelations({ status: BlogStatus.PUBLISHED }));
+
+      await expect(
+        service.update(
+          existing.id,
+          { status: BlogStatus.PUBLISHED, content: 'Now it has content.' },
+          actor,
+        ),
+      ).resolves.toBeDefined();
     });
 
     it('clears publishedAt when moving an already-published blog to SCHEDULED', async () => {

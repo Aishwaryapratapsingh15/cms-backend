@@ -72,13 +72,16 @@ export class BlogsService {
       await this.validateMediaExists(dto.featuredMediaId);
     }
 
+    const content = dto.content ?? '';
+
     const statusFields = this.resolveStatusFields(
       dto.status ?? BlogStatus.DRAFT,
       dto.scheduledAt,
       { status: BlogStatus.DRAFT, publishedAt: null },
+      content,
     );
 
-    const seoFields = this.resolveSeoFields(dto, slug);
+    const seoFields = this.resolveSeoFields(dto, slug, content);
 
     const blog = await this.prisma.blog.create({
       data: {
@@ -86,8 +89,8 @@ export class BlogsService {
         title: dto.title,
         slug,
         excerpt: dto.excerpt,
-        content: dto.content,
-        readingTime: calculateReadingTime(dto.content),
+        content,
+        readingTime: calculateReadingTime(content),
         ...seoFields,
         isFeatured: dto.isFeatured,
         allowComments: dto.allowComments,
@@ -147,6 +150,34 @@ export class BlogsService {
 
   async findPublished(query: ListBlogsQueryDto) {
     return this.findAll({ ...query, status: BlogStatus.PUBLISHED });
+  }
+
+  // Called on a timer (see BlogsSchedulerService) rather than at read-time,
+  // so a SCHEDULED post actually flips to PUBLISHED on its own instead of
+  // needing someone to manually reopen and re-save it.
+  async publishDueScheduledBlogs() {
+    const due = await this.prisma.blog.findMany({
+      where: {
+        status: BlogStatus.SCHEDULED,
+        scheduledAt: { lte: new Date() },
+        deletedAt: null,
+      },
+      select: { id: true, slug: true, scheduledAt: true },
+    });
+
+    return Promise.all(
+      due.map((blog) =>
+        this.prisma.blog.update({
+          where: { id: blog.id },
+          data: {
+            status: BlogStatus.PUBLISHED,
+            publishedAt: blog.scheduledAt,
+            scheduledAt: null,
+          },
+          select: { id: true, slug: true },
+        }),
+      ),
+    );
   }
 
   async findOne(id: string) {
@@ -214,7 +245,12 @@ export class BlogsService {
     }
 
     const statusFields = dto.status
-      ? this.resolveStatusFields(dto.status, dto.scheduledAt, existing)
+      ? this.resolveStatusFields(
+          dto.status,
+          dto.scheduledAt,
+          existing,
+          dto.content ?? existing.content,
+        )
       : undefined;
 
     const contentChanged =
@@ -344,8 +380,18 @@ export class BlogsService {
     status: BlogStatus,
     scheduledAt: string | undefined,
     current: { status: BlogStatus; publishedAt: Date | null },
+    content: string,
   ): StatusFields {
     const fields: StatusFields = { status };
+
+    if (
+      (status === BlogStatus.PUBLISHED || status === BlogStatus.SCHEDULED) &&
+      !content.trim()
+    ) {
+      throw new BadRequestException(
+        'Content is required to publish or schedule a post.',
+      );
+    }
 
     if (status === BlogStatus.SCHEDULED) {
       if (!scheduledAt || new Date(scheduledAt) <= new Date()) {
@@ -375,6 +421,7 @@ export class BlogsService {
   private resolveSeoFields(
     dto: CreateBlogDto,
     slug: string,
+    content: string,
   ): {
     seoTitle?: string;
     seoDescription?: string;
@@ -389,7 +436,7 @@ export class BlogsService {
       dto.seoDescription !== undefined
         ? dto.seoDescription
         : truncate(
-            dto.excerpt?.trim() || stripMarkdown(dto.content),
+            dto.excerpt?.trim() || stripMarkdown(content),
             SEO_DESCRIPTION_MAX_LENGTH,
           );
 

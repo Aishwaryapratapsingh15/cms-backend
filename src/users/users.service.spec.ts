@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   InternalServerErrorException,
@@ -11,6 +12,10 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { CreateUserByAdminDto } from './dto/create-user-by-admin.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { domainAcceptsMail } from '../common/utils/email-domain.util';
+
+jest.mock('../common/utils/email-domain.util');
+const mockDomainAcceptsMail = domainAcceptsMail as jest.Mock;
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -65,6 +70,8 @@ describe('UsersService', () => {
     }).compile();
 
     service = module.get<UsersService>(UsersService);
+
+    mockDomainAcceptsMail.mockReset().mockResolvedValue(true);
   });
 
   it('should be defined', () => {
@@ -125,6 +132,15 @@ describe('UsersService', () => {
       );
     });
 
+    it("throws BadRequestException when the email's domain can't receive mail", async () => {
+      prisma.user.count.mockResolvedValue(0);
+      prisma.user.findUnique.mockResolvedValue(null);
+      mockDomainAcceptsMail.mockResolvedValue(false);
+
+      await expect(service.create(dto)).rejects.toThrow(BadRequestException);
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    });
+
     it('creates the user with the ADMIN role and strips the password', async () => {
       prisma.user.count.mockResolvedValue(0);
       prisma.user.findUnique.mockResolvedValue(null);
@@ -175,6 +191,16 @@ describe('UsersService', () => {
       await expect(service.createByAdmin(adminDto)).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it("throws BadRequestException when the email's domain can't receive mail", async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      mockDomainAcceptsMail.mockResolvedValue(false);
+
+      await expect(service.createByAdmin(adminDto)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.user.create).not.toHaveBeenCalled();
     });
 
     it('creates the user with the given role, never fetching the password', async () => {

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -13,6 +14,7 @@ import { CreateUserByAdminDto } from './dto/create-user-by-admin.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { BCRYPT_SALT_ROUNDS } from '../common/constants';
+import { domainAcceptsMail } from '../common/utils/email-domain.util';
 
 const ADMIN_ROLE_NAME = 'ADMIN';
 
@@ -77,6 +79,12 @@ export class UsersService {
       throw new ConflictException('Email already in use.');
     }
 
+    if (!(await domainAcceptsMail(dto.email))) {
+      throw new BadRequestException(
+        "This email's domain doesn't appear to accept mail — check for typos.",
+      );
+    }
+
     const adminRole = await this.prisma.role.findUnique({
       where: { name: ADMIN_ROLE_NAME },
     });
@@ -107,6 +115,12 @@ export class UsersService {
     });
     if (existingUser) {
       throw new ConflictException('Email already in use.');
+    }
+
+    if (!(await domainAcceptsMail(dto.email))) {
+      throw new BadRequestException(
+        "This email's domain doesn't appear to accept mail — check for typos.",
+      );
     }
 
     const role = await this.prisma.role.findUnique({

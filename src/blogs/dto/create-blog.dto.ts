@@ -33,10 +33,13 @@ export class CreateBlogDto {
   @IsString()
   excerpt?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({
+    description:
+      'Post body (Markdown). May be left blank while drafting — required (non-empty) to publish or schedule.',
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  content: string;
+  content?: string;
 
   @ApiPropertyOptional({ enum: BlogStatus, default: BlogStatus.DRAFT })
   @IsOptional()

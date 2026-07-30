@@ -204,6 +204,15 @@ model Tag {
   @@map("tags")
 }
 
+model NewsletterSubscriber {
+  id    String @id @default(uuid())
+  email String @unique
+
+  createdAt DateTime @default(now())
+
+  @@map("newsletter_subscribers")
+}
+
 model BlogCategory {
   blogId     String
   categoryId String
