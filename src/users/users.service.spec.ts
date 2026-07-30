@@ -71,6 +71,36 @@ describe('UsersService', () => {
     expect(service).toBeDefined();
   });
 
+  describe('findByEmail', () => {
+    it('excludes soft-deleted users so their credentials stop working', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      const result = await service.findByEmail('jane@example.com');
+
+      expect(prisma.user.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { email: 'jane@example.com', deletedAt: null },
+        }),
+      );
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('findById', () => {
+    it('excludes soft-deleted users so their sessions stop working', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      const result = await service.findById('user-id');
+
+      expect(prisma.user.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'user-id', deletedAt: null },
+        }),
+      );
+      expect(result).toBeNull();
+    });
+  });
+
   describe('create', () => {
     it('throws ForbiddenException when users already exist', async () => {
       prisma.user.count.mockResolvedValue(1);

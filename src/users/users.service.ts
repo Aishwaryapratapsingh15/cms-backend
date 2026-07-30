@@ -39,9 +39,10 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findByEmail(email: string) {
-    return this.prisma.user.findUnique({
+    return this.prisma.user.findFirst({
       where: {
         email,
+        deletedAt: null,
       },
       include: {
         role: true,
@@ -50,9 +51,10 @@ export class UsersService {
   }
 
   async findById(id: string) {
-    return this.prisma.user.findUnique({
+    return this.prisma.user.findFirst({
       where: {
         id,
+        deletedAt: null,
       },
       include: {
         role: true,
