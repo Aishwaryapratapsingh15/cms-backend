@@ -169,12 +169,26 @@ model Blog {
   categories BlogCategory[]
   tags       BlogTag[]
   versions   BlogVersion[]
+  faqs       BlogFaq[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
   @@map("blogs")
+}
+
+model BlogFaq {
+  id     String @id @default(uuid())
+  blogId String
+
+  question String
+  answer   String
+  position Int
+
+  blog Blog @relation(fields: [blogId], references: [id], onDelete: Cascade)
+
+  @@map("blog_faqs")
 }
 
 model Category {

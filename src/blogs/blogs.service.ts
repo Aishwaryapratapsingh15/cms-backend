@@ -32,6 +32,7 @@ const BLOG_INCLUDE = {
   },
   categories: { include: { category: true } },
   tags: { include: { tag: true } },
+  faqs: { orderBy: { position: 'asc' } },
 } satisfies Prisma.BlogInclude;
 
 type BlogWithRelations = Prisma.BlogGetPayload<{ include: typeof BLOG_INCLUDE }>;
@@ -101,6 +102,15 @@ export class BlogsService {
           : undefined,
         tags: dto.tagIds?.length
           ? { create: dto.tagIds.map((tagId) => ({ tagId })) }
+          : undefined,
+        faqs: dto.faqs?.length
+          ? {
+              create: dto.faqs.map((faq, index) => ({
+                question: faq.question,
+                answer: faq.answer,
+                position: index,
+              })),
+            }
           : undefined,
       },
       include: BLOG_INCLUDE,
@@ -288,6 +298,20 @@ export class BlogsService {
         if (dto.tagIds.length) {
           await tx.blogTag.createMany({
             data: dto.tagIds.map((tagId) => ({ blogId: id, tagId })),
+          });
+        }
+      }
+
+      if (dto.faqs) {
+        await tx.blogFaq.deleteMany({ where: { blogId: id } });
+        if (dto.faqs.length) {
+          await tx.blogFaq.createMany({
+            data: dto.faqs.map((faq, index) => ({
+              blogId: id,
+              question: faq.question,
+              answer: faq.answer,
+              position: index,
+            })),
           });
         }
       }

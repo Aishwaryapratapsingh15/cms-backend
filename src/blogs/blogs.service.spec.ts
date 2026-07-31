@@ -31,6 +31,7 @@ describe('BlogsService', () => {
     };
     blogCategory: { deleteMany: jest.Mock; createMany: jest.Mock };
     blogTag: { deleteMany: jest.Mock; createMany: jest.Mock };
+    blogFaq: { deleteMany: jest.Mock; createMany: jest.Mock };
     category: { count: jest.Mock };
     tag: { count: jest.Mock };
     media: { findUnique: jest.Mock };
@@ -82,6 +83,7 @@ describe('BlogsService', () => {
       },
       blogCategory: { deleteMany: jest.fn(), createMany: jest.fn() },
       blogTag: { deleteMany: jest.fn(), createMany: jest.fn() },
+      blogFaq: { deleteMany: jest.fn(), createMany: jest.fn() },
       category: { count: jest.fn() },
       tag: { count: jest.fn() },
       media: { findUnique: jest.fn() },
@@ -127,6 +129,48 @@ describe('BlogsService', () => {
       expect(prisma.blog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ slug: 'how-to-build-a-cms' }),
+        }),
+      );
+    });
+
+    it('creates faqs with their index as position', async () => {
+      prisma.blog.findUnique.mockResolvedValue(null);
+      prisma.blog.create.mockResolvedValue(withRelations());
+
+      await service.create(
+        {
+          ...dto,
+          faqs: [
+            { question: 'What is EiceRise?', answer: 'A hospitality ERP.' },
+            { question: 'Who is it for?', answer: 'Hotels in India.' },
+          ],
+        },
+        actor,
+      );
+
+      expect(prisma.blog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            faqs: {
+              create: [
+                { question: 'What is EiceRise?', answer: 'A hospitality ERP.', position: 0 },
+                { question: 'Who is it for?', answer: 'Hotels in India.', position: 1 },
+              ],
+            },
+          }),
+        }),
+      );
+    });
+
+    it('omits the faqs relation entirely when none are given', async () => {
+      prisma.blog.findUnique.mockResolvedValue(null);
+      prisma.blog.create.mockResolvedValue(withRelations());
+
+      await service.create(dto, actor);
+
+      expect(prisma.blog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ faqs: undefined }),
         }),
       );
     });
@@ -571,6 +615,51 @@ describe('BlogsService', () => {
       expect(prisma.blogCategory.createMany).toHaveBeenCalledWith({
         data: [{ blogId: existing.id, categoryId: 'cat-2' }],
       });
+    });
+
+    it('full-replaces faqs when faqs is provided', async () => {
+      const existing = withRelations();
+      prisma.blog.findFirst.mockResolvedValue(existing);
+      prisma.blog.update.mockResolvedValue(withRelations());
+
+      await service.update(
+        existing.id,
+        { faqs: [{ question: 'New question?', answer: 'New answer.' }] },
+        actor,
+      );
+
+      expect(prisma.blogFaq.deleteMany).toHaveBeenCalledWith({
+        where: { blogId: existing.id },
+      });
+      expect(prisma.blogFaq.createMany).toHaveBeenCalledWith({
+        data: [
+          { blogId: existing.id, question: 'New question?', answer: 'New answer.', position: 0 },
+        ],
+      });
+    });
+
+    it('clears all faqs when an empty faqs array is provided', async () => {
+      const existing = withRelations();
+      prisma.blog.findFirst.mockResolvedValue(existing);
+      prisma.blog.update.mockResolvedValue(withRelations());
+
+      await service.update(existing.id, { faqs: [] }, actor);
+
+      expect(prisma.blogFaq.deleteMany).toHaveBeenCalledWith({
+        where: { blogId: existing.id },
+      });
+      expect(prisma.blogFaq.createMany).not.toHaveBeenCalled();
+    });
+
+    it('leaves faqs untouched when faqs is omitted from the update', async () => {
+      const existing = withRelations();
+      prisma.blog.findFirst.mockResolvedValue(existing);
+      prisma.blog.update.mockResolvedValue(withRelations());
+
+      await service.update(existing.id, { title: 'New Title' }, actor);
+
+      expect(prisma.blogFaq.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.blogFaq.createMany).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException for SCHEDULED without a future scheduledAt', async () => {

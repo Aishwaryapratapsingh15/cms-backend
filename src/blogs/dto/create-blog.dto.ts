@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BlogStatus } from '@prisma/client';
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -11,7 +13,9 @@ import {
   IsUUID,
   IsUrl,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
+import { BlogFaqDto } from './blog-faq.dto';
 
 export class CreateBlogDto {
   @ApiProperty({ example: 'How to build a CMS backend', maxLength: 255 })
@@ -95,4 +99,16 @@ export class CreateBlogDto {
   @IsArray()
   @IsUUID(4, { each: true })
   tagIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [BlogFaqDto],
+    description:
+      'Optional FAQ Q&A pairs, rendered on the post and emitted as FAQPage schema.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => BlogFaqDto)
+  faqs?: BlogFaqDto[];
 }
