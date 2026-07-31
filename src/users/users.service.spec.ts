@@ -359,7 +359,7 @@ describe('UsersService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('soft-deletes the user by setting deletedAt', async () => {
+    it('soft-deletes the user, setting deletedAt and mangling the email', async () => {
       prisma.user.findFirst
         .mockResolvedValueOnce(existingUser)
         .mockResolvedValueOnce({ id: 'some-other-admin-id' });
@@ -369,8 +369,24 @@ describe('UsersService', () => {
 
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: existingUser.id },
-        data: { deletedAt: expect.any(Date) },
+        data: {
+          deletedAt: expect.any(Date),
+          email: expect.stringContaining(existingUser.email),
+        },
       });
+    });
+
+    it('frees up the email so it can be reused after deletion', async () => {
+      prisma.user.findFirst
+        .mockResolvedValueOnce(existingUser)
+        .mockResolvedValueOnce({ id: 'some-other-admin-id' });
+      prisma.user.update.mockResolvedValue({});
+
+      await service.remove(existingUser.id, 'current-user-id');
+
+      const call = prisma.user.update.mock.calls[0][0];
+      expect(call.data.email).not.toBe(existingUser.email);
+      expect(call.data.email).toMatch(/^deleted-\d+-.+/);
     });
 
     it('throws ForbiddenException when deleting the first admin, even for another admin', async () => {

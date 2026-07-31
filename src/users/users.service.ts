@@ -259,9 +259,15 @@ export class UsersService {
       throw new ForbiddenException('The first admin account cannot be deleted.');
     }
 
+    // `email` is a hard unique constraint in the DB, and this is a soft
+    // delete — the row stays forever, so without mangling the email here,
+    // that address would be permanently unable to sign up again.
     await this.prisma.user.update({
       where: { id },
-      data: { deletedAt: new Date() },
+      data: {
+        deletedAt: new Date(),
+        email: `deleted-${Date.now()}-${existing.email}`,
+      },
     });
   }
 }
