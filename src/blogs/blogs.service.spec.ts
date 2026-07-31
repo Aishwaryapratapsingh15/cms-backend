@@ -686,16 +686,32 @@ describe('BlogsService', () => {
       );
     });
 
-    it('soft-deletes by setting deletedAt', async () => {
-      prisma.blog.findFirst.mockResolvedValue(withRelations());
+    it('soft-deletes, setting deletedAt and mangling the slug', async () => {
+      const existing = withRelations();
+      prisma.blog.findFirst.mockResolvedValue(existing);
       prisma.blog.update.mockResolvedValue({});
 
       await service.remove('blog-id');
 
       expect(prisma.blog.update).toHaveBeenCalledWith({
         where: { id: 'blog-id' },
-        data: { deletedAt: expect.any(Date) },
+        data: {
+          deletedAt: expect.any(Date),
+          slug: expect.stringContaining(existing.slug),
+        },
       });
+    });
+
+    it('frees up the slug so it can be reused after deletion', async () => {
+      const existing = withRelations();
+      prisma.blog.findFirst.mockResolvedValue(existing);
+      prisma.blog.update.mockResolvedValue({});
+
+      await service.remove('blog-id');
+
+      const call = prisma.blog.update.mock.calls[0][0];
+      expect(call.data.slug).not.toBe(existing.slug);
+      expect(call.data.slug).toMatch(/^deleted-\d+-.+/);
     });
   });
 

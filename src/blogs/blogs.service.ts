@@ -323,9 +323,15 @@ export class BlogsService {
       throw new NotFoundException('Blog not found.');
     }
 
+    // `slug` is a hard unique constraint in the DB, and this is a soft
+    // delete — the row stays forever, so without mangling the slug here,
+    // it would be permanently unusable for a new post.
     await this.prisma.blog.update({
       where: { id },
-      data: { deletedAt: new Date() },
+      data: {
+        deletedAt: new Date(),
+        slug: `deleted-${Date.now()}-${existing.slug}`,
+      },
     });
   }
 
