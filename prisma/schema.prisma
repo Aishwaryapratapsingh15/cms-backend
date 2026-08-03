@@ -153,6 +153,16 @@ model Blog {
   seoDescription String?
   canonicalUrl   String?
 
+  // Post-content CTA card. Null falls back to the frontend's default copy
+  // (see BlogDetail.jsx) — left as free-form fields, not auto-derived like
+  // the SEO ones above, since there's no sensible per-post default to compute.
+  ctaHeading       String?
+  ctaDescription   String?
+  ctaPrimaryText   String?
+  ctaPrimaryUrl    String?
+  ctaSecondaryText String?
+  ctaSecondaryUrl  String?
+
   isFeatured    Boolean @default(false)
   allowComments Boolean @default(true)
 

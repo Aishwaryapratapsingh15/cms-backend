@@ -73,6 +73,47 @@ export class CreateBlogDto {
   @IsUrl()
   canonicalUrl?: string;
 
+  @ApiPropertyOptional({
+    description: 'Post-content CTA card heading. Falls back to default site copy if omitted.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  ctaHeading?: string;
+
+  @ApiPropertyOptional({ description: 'Post-content CTA card description.' })
+  @IsOptional()
+  @IsString()
+  ctaDescription?: string;
+
+  @ApiPropertyOptional({
+    description: 'Primary CTA button label, e.g. "Request a Demo".',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  ctaPrimaryText?: string;
+
+  @ApiPropertyOptional({ description: 'Primary CTA button link.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  ctaPrimaryUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Secondary CTA button label, e.g. "Talk to Sales".',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  ctaSecondaryText?: string;
+
+  @ApiPropertyOptional({ description: 'Secondary CTA button link.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  ctaSecondaryUrl?: string;
+
   @ApiPropertyOptional({ default: false })
   @IsOptional()
   @IsBoolean()
