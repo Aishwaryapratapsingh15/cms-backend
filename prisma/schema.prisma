@@ -202,9 +202,12 @@ model BlogFaq {
 }
 
 model Category {
-  id          String  @id @default(uuid())
-  name        String
-  slug        String  @unique
+  id      String @id @default(uuid())
+  name    String
+  slug    String @unique
+  // Marketing headline shown on the public category page, distinct from
+  // `name` (which is used as the small eyebrow/pill label everywhere else).
+  heading     String?
   description String?
   color       String?
 

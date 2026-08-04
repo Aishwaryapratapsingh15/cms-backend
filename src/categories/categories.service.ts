@@ -23,6 +23,7 @@ export class CategoriesService {
       data: {
         name: dto.name,
         slug,
+        heading: dto.heading,
         description: dto.description,
         color: dto.color,
       },
@@ -77,6 +78,8 @@ export class CategoriesService {
         id: category.id,
         name: category.name,
         slug: category.slug,
+        heading: category.heading,
+        description: category.description,
         color: category.color,
         count: category._count.blogs,
       }))

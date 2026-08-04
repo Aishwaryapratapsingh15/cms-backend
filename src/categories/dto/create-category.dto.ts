@@ -23,6 +23,16 @@ export class CreateCategoryDto {
   @MaxLength(180)
   slug?: string;
 
+  @ApiPropertyOptional({
+    description:
+      "Marketing headline shown on the public category page. Falls back to the frontend's default copy if omitted.",
+    maxLength: 255,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  heading?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
