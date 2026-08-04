@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma } from '@prisma/client';
+import { MediaType, Prisma } from '@prisma/client';
 import {
   DeleteObjectCommand,
   PutObjectCommand,
@@ -63,9 +63,13 @@ export class MediaService {
     file: Express.Multer.File,
     dto: UploadMediaDto,
     uploadedById: string,
+    type: MediaType = MediaType.CONTENT,
   ) {
     const storedName = `${randomUUID()}${extname(file.originalname)}`;
-    const s3Key = `${MEDIA_KEY_PREFIX}${storedName}`;
+    // AVATAR uploads live under their own subfolder so they're organizationally
+    // separate in S3 too, not just filtered out of the library query below.
+    const folder = type === MediaType.AVATAR ? 'author/' : '';
+    const s3Key = `${MEDIA_KEY_PREFIX}${folder}${storedName}`;
 
     const { width, height } = this.extractDimensions(file);
 
@@ -80,6 +84,7 @@ export class MediaService {
 
     const media = await this.prisma.media.create({
       data: {
+        type,
         originalName: file.originalname,
         storedName,
         s3Key,
@@ -102,6 +107,9 @@ export class MediaService {
     const skip = (page - 1) * limit;
 
     const where: Prisma.MediaWhereInput = {
+      // Avatars are managed exclusively through the dedicated user-avatar
+      // upload, never picked from this shared library.
+      type: MediaType.CONTENT,
       ...(search && {
         originalName: { contains: search, mode: 'insensitive' },
       }),

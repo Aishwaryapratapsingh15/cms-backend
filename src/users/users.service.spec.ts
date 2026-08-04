@@ -6,8 +6,10 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MediaService } from '../media/media.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateUserByAdminDto } from './dto/create-user-by-admin.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
@@ -32,6 +34,7 @@ describe('UsersService', () => {
       findUnique: jest.Mock;
     };
   };
+  let mediaService: { upload: jest.Mock };
 
   const dto: CreateUserDto = {
     fullName: 'Jane Doe',
@@ -62,10 +65,17 @@ describe('UsersService', () => {
       },
     };
 
+    mediaService = { upload: jest.fn() };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
         { provide: PrismaService, useValue: prisma },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn(), getOrThrow: jest.fn() },
+        },
+        { provide: MediaService, useValue: mediaService },
       ],
     }).compile();
 
@@ -293,9 +303,10 @@ describe('UsersService', () => {
     it('returns the user when found', async () => {
       prisma.user.findFirst.mockResolvedValue(existingUser);
 
-      await expect(service.findOne(existingUser.id)).resolves.toEqual(
-        existingUser,
-      );
+      await expect(service.findOne(existingUser.id)).resolves.toEqual({
+        ...existingUser,
+        avatarMedia: null,
+      });
     });
   });
 
@@ -341,6 +352,53 @@ describe('UsersService', () => {
         }),
       );
       expect(result.fullName).toBe('Jane Updated');
+    });
+  });
+
+  describe('setAvatar', () => {
+    const file = {
+      originalname: 'headshot.jpg',
+      mimetype: 'image/jpeg',
+      size: 1024,
+      buffer: Buffer.from('fake-image-bytes'),
+    } as Express.Multer.File;
+
+    it('throws NotFoundException when the user does not exist', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.setAvatar('missing-id', file, 'uploader-id'),
+      ).rejects.toThrow(NotFoundException);
+      expect(mediaService.upload).not.toHaveBeenCalled();
+    });
+
+    it('uploads as AVATAR type and links the result to the user', async () => {
+      prisma.user.findFirst.mockResolvedValue(existingUser);
+      mediaService.upload.mockResolvedValue({ id: 'new-media-id' });
+      prisma.user.update.mockResolvedValue({
+        ...existingUser,
+        avatarMediaId: 'new-media-id',
+      });
+
+      const result = await service.setAvatar(
+        existingUser.id,
+        file,
+        'uploader-id',
+      );
+
+      expect(mediaService.upload).toHaveBeenCalledWith(
+        file,
+        {},
+        'uploader-id',
+        'AVATAR',
+      );
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: existingUser.id },
+          data: { avatarMediaId: 'new-media-id' },
+        }),
+      );
+      expect(result.avatarMediaId).toBe('new-media-id');
     });
   });
 

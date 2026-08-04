@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma } from '@prisma/client';
+import { MediaType, Prisma } from '@prisma/client';
 import { imageSize } from 'image-size';
 import {
   DeleteObjectCommand,
@@ -166,6 +166,28 @@ describe('MediaService', () => {
       expect(typeof result.fileSize).toBe('number');
       expect(result.url).toBe('https://cdn.example.com/uuid-value.jpg');
     });
+
+    it('defaults to CONTENT type at the flat media/ key when no type is given', async () => {
+      (imageSize as jest.Mock).mockReturnValue({ width: 800, height: 600 });
+      prisma.media.create.mockResolvedValue(existingMedia);
+
+      await service.upload(file, dto, 'user-id');
+
+      const createData = prisma.media.create.mock.calls[0][0].data;
+      expect(createData.type).toBe('CONTENT');
+      expect(createData.s3Key).toMatch(/^media\/[^/]+\.jpg$/);
+    });
+
+    it('stores AVATAR uploads under media/author/ with type AVATAR', async () => {
+      (imageSize as jest.Mock).mockReturnValue({ width: 800, height: 600 });
+      prisma.media.create.mockResolvedValue(existingMedia);
+
+      await service.upload(file, dto, 'user-id', MediaType.AVATAR);
+
+      const createData = prisma.media.create.mock.calls[0][0].data;
+      expect(createData.type).toBe('AVATAR');
+      expect(createData.s3Key).toMatch(/^media\/author\/[^/]+\.jpg$/);
+    });
   });
 
   describe('findAll', () => {
@@ -184,11 +206,30 @@ describe('MediaService', () => {
 
       expect(prisma.media.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { originalName: { contains: 'photo', mode: 'insensitive' } },
+          where: {
+            type: 'CONTENT',
+            originalName: { contains: 'photo', mode: 'insensitive' },
+          },
         }),
       );
       expect(result.items[0].fileSize).toBe(2048);
       expect(result.meta.total).toBe(1);
+    });
+
+    it('excludes AVATAR-type media even with no search term', async () => {
+      prisma.media.findMany.mockResolvedValue([]);
+      prisma.media.count.mockResolvedValue(0);
+
+      await service.findAll({
+        page: 1,
+        limit: 10,
+        sortBy: 'originalName',
+        sortOrder: 'asc',
+      });
+
+      expect(prisma.media.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { type: 'CONTENT' } }),
+      );
     });
   });
 

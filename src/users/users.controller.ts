@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,8 +9,19 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateUserByAdminDto } from './dto/create-user-by-admin.dto';
@@ -21,6 +33,9 @@ import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import { Audit } from '../audit/decorators/audit.decorator';
+
+const ALLOWED_AVATAR_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_AVATAR_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 
 @ApiTags('users')
 @Controller('users')
@@ -89,6 +104,54 @@ export class UsersController {
   @ApiResponse({ status: 409, description: 'Email already in use.' })
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
     return this.usersService.update(id, dto);
+  }
+
+  @Post(':id/avatar')
+  @Permissions('users:update')
+  @Audit('User')
+  @ApiBearerAuth()
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_AVATAR_FILE_SIZE_BYTES },
+      fileFilter: (_req, file, callback) => {
+        if (!ALLOWED_AVATAR_MIME_TYPES.includes(file.mimetype)) {
+          callback(
+            new BadRequestException(`Unsupported file type: ${file.mimetype}.`),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ResponseMessage('Avatar updated successfully')
+  @ApiOperation({
+    summary: "Upload and set a user's avatar photo (admin-only)",
+  })
+  @ApiResponse({ status: 200, description: 'Updated user.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Unsupported file type or too large.',
+  })
+  @ApiResponse({ status: 404, description: 'User not found.' })
+  setAvatar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!file) {
+      throw new BadRequestException('A file is required.');
+    }
+    return this.usersService.setAvatar(id, file, user.id);
   }
 
   @Delete(':id')

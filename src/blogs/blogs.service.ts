@@ -25,7 +25,21 @@ const SEO_DESCRIPTION_MAX_LENGTH = 160;
 
 const BLOG_INCLUDE = {
   author: {
-    select: { id: true, fullName: true, email: true, avatarMediaId: true },
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      avatarMediaId: true,
+      avatarMedia: {
+        select: {
+          id: true,
+          s3Key: true,
+          altText: true,
+          width: true,
+          height: true,
+        },
+      },
+    },
   },
   featuredMedia: {
     select: { id: true, s3Key: true, altText: true, width: true, height: true },
@@ -413,6 +427,18 @@ export class BlogsService {
       featuredMedia: blog.featuredMedia
         ? { ...blog.featuredMedia, url: buildMediaUrl(this.configService, blog.featuredMedia.s3Key) }
         : null,
+      author: {
+        ...blog.author,
+        avatarMedia: blog.author.avatarMedia
+          ? {
+              ...blog.author.avatarMedia,
+              url: buildMediaUrl(
+                this.configService,
+                blog.author.avatarMedia.s3Key,
+              ),
+            }
+          : null,
+      },
       categories: blog.categories.map((entry) => entry.category),
       tags: blog.tags.map((entry) => entry.tag),
     };

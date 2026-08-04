@@ -78,6 +78,7 @@ model User {
   twitter  String?
 
   avatarMediaId String?
+  avatarMedia   Media?  @relation("UserAvatar", fields: [avatarMediaId], references: [id])
 
   isActive  Boolean   @default(true)
   lastLogin DateTime?
@@ -110,8 +111,19 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+enum MediaType {
+  CONTENT
+  AVATAR
+}
+
 model Media {
   id String @id @default(uuid())
+
+  // CONTENT (default) shows in the general media library/picker used across
+  // the CMS (blog featured images, etc). AVATAR is excluded from that listing
+  // — avatars are only ever set through the dedicated user-avatar upload, not
+  // picked from the shared library.
+  type MediaType @default(CONTENT)
 
   originalName String
   storedName   String
@@ -129,6 +141,7 @@ model Media {
   uploadedBy   User   @relation("UploadedMedia", fields: [uploadedById], references: [id])
 
   featuredBlogs Blog[] @relation("FeaturedImage")
+  avatarUsers   User[] @relation("UserAvatar")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -6,15 +6,18 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+import { MediaType, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { MediaService } from '../media/media.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateUserByAdminDto } from './dto/create-user-by-admin.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { BCRYPT_SALT_ROUNDS } from '../common/constants';
 import { domainAcceptsMail } from '../common/utils/email-domain.util';
+import { buildMediaUrl } from '../common/utils/media-url.util';
 
 const ADMIN_ROLE_NAME = 'ADMIN';
 
@@ -28,6 +31,9 @@ const SAFE_USER_SELECT = {
   linkedin: true,
   twitter: true,
   avatarMediaId: true,
+  avatarMedia: {
+    select: { id: true, s3Key: true, altText: true, width: true, height: true },
+  },
   isActive: true,
   lastLogin: true,
   createdAt: true,
@@ -36,9 +42,29 @@ const SAFE_USER_SELECT = {
   role: true,
 } satisfies Prisma.UserSelect;
 
+type UserWithAvatar = Prisma.UserGetPayload<{
+  select: typeof SAFE_USER_SELECT;
+}>;
+
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+    private readonly mediaService: MediaService,
+  ) {}
+
+  private mapUser(user: UserWithAvatar) {
+    return {
+      ...user,
+      avatarMedia: user.avatarMedia
+        ? {
+            ...user.avatarMedia,
+            url: buildMediaUrl(this.configService, user.avatarMedia.s3Key),
+          }
+        : null,
+    };
+  }
 
   async findByEmail(email: string) {
     return this.prisma.user.findFirst({
@@ -132,7 +158,7 @@ export class UsersService {
 
     const hashedPassword = await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS);
 
-    return this.prisma.user.create({
+    const user = await this.prisma.user.create({
       data: {
         fullName: dto.fullName,
         email: dto.email,
@@ -141,6 +167,8 @@ export class UsersService {
       },
       select: SAFE_USER_SELECT,
     });
+
+    return this.mapUser(user);
   }
 
   async findAll(query: ListUsersQueryDto) {
@@ -175,7 +203,7 @@ export class UsersService {
 
     return {
       items: items.map((item) => ({
-        ...item,
+        ...this.mapUser(item),
         isFirstAdmin: item.id === firstAdmin?.id,
       })),
       meta: {
@@ -197,7 +225,7 @@ export class UsersService {
       throw new NotFoundException('User not found.');
     }
 
-    return user;
+    return this.mapUser(user);
   }
 
   async update(id: string, dto: UpdateUserDto) {
@@ -228,7 +256,7 @@ export class UsersService {
 
     const { password, ...rest } = dto;
 
-    return this.prisma.user.update({
+    const user = await this.prisma.user.update({
       where: { id },
       data: {
         ...rest,
@@ -236,6 +264,32 @@ export class UsersService {
       },
       select: SAFE_USER_SELECT,
     });
+
+    return this.mapUser(user);
+  }
+
+  async setAvatar(id: string, file: Express.Multer.File, uploadedById: string) {
+    const existing = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!existing) {
+      throw new NotFoundException('User not found.');
+    }
+
+    const media = await this.mediaService.upload(
+      file,
+      {},
+      uploadedById,
+      MediaType.AVATAR,
+    );
+
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: { avatarMediaId: media.id },
+      select: SAFE_USER_SELECT,
+    });
+
+    return this.mapUser(user);
   }
 
   async remove(id: string, currentUserId: string): Promise<void> {
