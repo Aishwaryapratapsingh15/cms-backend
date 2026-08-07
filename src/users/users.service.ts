@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -48,6 +49,8 @@ type UserWithAvatar = Prisma.UserGetPayload<{
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
@@ -316,12 +319,29 @@ export class UsersService {
     // `email` is a hard unique constraint in the DB, and this is a soft
     // delete — the row stays forever, so without mangling the email here,
     // that address would be permanently unable to sign up again.
+    // avatarMediaId is cleared here (rather than left pointing at a row we're
+    // about to delete below) so there's no dangling FK on the soft-deleted user.
     await this.prisma.user.update({
       where: { id },
       data: {
         deletedAt: new Date(),
         email: `deleted-${Date.now()}-${existing.email}`,
+        avatarMediaId: null,
       },
     });
+
+    // Best-effort cleanup: the user is already deleted at this point, so a
+    // failure here (e.g. the media row was somehow already gone) shouldn't
+    // surface as a failure of the delete-user call itself.
+    if (existing.avatarMediaId) {
+      try {
+        await this.mediaService.remove(existing.avatarMediaId);
+      } catch (error) {
+        this.logger.error(
+          `Failed to clean up avatar media ${existing.avatarMediaId} for deleted user ${id}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
   }
 }

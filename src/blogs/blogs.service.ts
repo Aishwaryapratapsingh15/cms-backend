@@ -235,7 +235,7 @@ export class BlogsService {
 
     await this.prisma.blog.update({
       where: { id: blog.id },
-      data: { views: { increment: 1 } },
+      data: { views: { increment: 1 }, updatedAt: blog.updatedAt },
     });
 
     return this.mapBlog({ ...blog, views: blog.views + 1 });

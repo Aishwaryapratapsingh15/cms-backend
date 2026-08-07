@@ -34,7 +34,7 @@ describe('UsersService', () => {
       findUnique: jest.Mock;
     };
   };
-  let mediaService: { upload: jest.Mock };
+  let mediaService: { upload: jest.Mock; remove: jest.Mock };
 
   const dto: CreateUserDto = {
     fullName: 'Jane Doe',
@@ -65,7 +65,7 @@ describe('UsersService', () => {
       },
     };
 
-    mediaService = { upload: jest.fn() };
+    mediaService = { upload: jest.fn(), remove: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -430,8 +430,51 @@ describe('UsersService', () => {
         data: {
           deletedAt: expect.any(Date),
           email: expect.stringContaining(existingUser.email),
+          avatarMediaId: null,
         },
       });
+    });
+
+    it('does not attempt avatar cleanup when the user has no avatar', async () => {
+      prisma.user.findFirst
+        .mockResolvedValueOnce(existingUser)
+        .mockResolvedValueOnce({ id: 'some-other-admin-id' });
+      prisma.user.update.mockResolvedValue({});
+
+      await service.remove(existingUser.id, 'current-user-id');
+
+      expect(mediaService.remove).not.toHaveBeenCalled();
+    });
+
+    it("deletes the avatar's media/S3 object when the deleted user had one", async () => {
+      prisma.user.findFirst
+        .mockResolvedValueOnce({
+          ...existingUser,
+          avatarMediaId: 'avatar-media-id',
+        })
+        .mockResolvedValueOnce({ id: 'some-other-admin-id' });
+      prisma.user.update.mockResolvedValue({});
+      mediaService.remove.mockResolvedValue(undefined);
+
+      await service.remove(existingUser.id, 'current-user-id');
+
+      expect(mediaService.remove).toHaveBeenCalledWith('avatar-media-id');
+    });
+
+    it('still succeeds even if avatar cleanup itself fails', async () => {
+      prisma.user.findFirst
+        .mockResolvedValueOnce({
+          ...existingUser,
+          avatarMediaId: 'avatar-media-id',
+        })
+        .mockResolvedValueOnce({ id: 'some-other-admin-id' });
+      prisma.user.update.mockResolvedValue({});
+      mediaService.remove.mockRejectedValue(new Error('media already gone'));
+
+      await expect(
+        service.remove(existingUser.id, 'current-user-id'),
+      ).resolves.toBeUndefined();
+      expect(prisma.user.update).toHaveBeenCalled();
     });
 
     it('frees up the email so it can be reused after deletion', async () => {
