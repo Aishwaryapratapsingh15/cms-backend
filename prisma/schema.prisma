@@ -198,6 +198,7 @@ model Blog {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
+  @@index([status, scheduledAt])
   @@map("blogs")
 }
 

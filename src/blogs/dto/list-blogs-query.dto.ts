@@ -12,7 +12,9 @@ export const BLOG_SORT_FIELDS = [
 export type BlogSortField = (typeof BLOG_SORT_FIELDS)[number];
 
 export class ListBlogsQueryDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ description: 'Case-insensitive match on title/excerpt/content' })
+  @ApiPropertyOptional({
+    description: 'Case-insensitive match on title/excerpt/content',
+  })
   @IsOptional()
   @IsString()
   search?: string;

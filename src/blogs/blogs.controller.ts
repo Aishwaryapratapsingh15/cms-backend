@@ -9,7 +9,12 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { BlogsService } from './blogs.service';
 import { CreateBlogDto } from './dto/create-blog.dto';
 import { UpdateBlogDto } from './dto/update-blog.dto';
@@ -33,7 +38,10 @@ export class BlogsController {
   @ResponseMessage('Blog created successfully')
   @ApiOperation({ summary: 'Create a blog post' })
   @ApiResponse({ status: 201, description: 'Blog created.' })
-  @ApiResponse({ status: 400, description: 'Invalid category/tag id or scheduledAt.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid category/tag id or scheduledAt.',
+  })
   @ApiResponse({ status: 409, description: 'Slug already in use.' })
   create(@Body() dto: CreateBlogDto, @CurrentUser() user: AuthenticatedUser) {
     return this.blogsService.create(dto, user);
@@ -43,7 +51,9 @@ export class BlogsController {
   @Permissions('blogs:read')
   @ApiBearerAuth()
   @ResponseMessage('Blogs fetched successfully')
-  @ApiOperation({ summary: 'List blogs with pagination, search, status filter, and sorting' })
+  @ApiOperation({
+    summary: 'List blogs with pagination, search, status filter, and sorting',
+  })
   @ApiResponse({ status: 200, description: 'Paginated blogs.' })
   findAll(@Query() query: ListBlogsQueryDto) {
     return this.blogsService.findAll(query);
@@ -63,7 +73,8 @@ export class BlogsController {
   @Get('public')
   @ResponseMessage('Published blogs fetched successfully')
   @ApiOperation({
-    summary: 'Publicly list published blogs with pagination, search, and sorting',
+    summary:
+      'Publicly list published blogs with pagination, search, and sorting',
   })
   @ApiResponse({ status: 200, description: 'Paginated published blogs.' })
   findPublished(@Query() query: ListBlogsQueryDto) {
@@ -97,8 +108,13 @@ export class BlogsController {
   @Audit('Blog', 'UPDATE')
   @ApiBearerAuth()
   @ResponseMessage('Blog rolled back successfully')
-  @ApiOperation({ summary: 'Restore title/excerpt/content from a previous version' })
-  @ApiResponse({ status: 200, description: 'Blog restored to the given version.' })
+  @ApiOperation({
+    summary: 'Restore title/excerpt/content from a previous version',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Blog restored to the given version.',
+  })
   @ApiResponse({ status: 404, description: 'Blog or version not found.' })
   rollback(
     @Param('id', ParseUUIDPipe) id: string,
@@ -115,7 +131,10 @@ export class BlogsController {
   @ResponseMessage('Blog updated successfully')
   @ApiOperation({ summary: 'Update a blog' })
   @ApiResponse({ status: 200, description: 'Updated blog.' })
-  @ApiResponse({ status: 400, description: 'Invalid category/tag id or scheduledAt.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid category/tag id or scheduledAt.',
+  })
   @ApiResponse({ status: 404, description: 'Blog not found.' })
   @ApiResponse({ status: 409, description: 'Slug already in use.' })
   update(

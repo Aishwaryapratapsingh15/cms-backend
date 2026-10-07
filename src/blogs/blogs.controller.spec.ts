@@ -45,47 +45,47 @@ describe('BlogsController', () => {
     expect(controller).toBeDefined();
   });
 
-  it('create delegates to BlogsService.create with the current user', () => {
+  it('create delegates to BlogsService.create with the current user', async () => {
     const dto = { title: 'Title', content: 'Content' };
-    controller.create(dto, currentUser);
+    await controller.create(dto, currentUser);
 
     expect(blogsService.create).toHaveBeenCalledWith(dto, currentUser);
   });
 
-  it('findAll delegates to BlogsService.findAll', () => {
+  it('findAll delegates to BlogsService.findAll', async () => {
     const query = { page: 1, limit: 10 } as ListBlogsQueryDto;
-    controller.findAll(query);
+    await controller.findAll(query);
 
     expect(blogsService.findAll).toHaveBeenCalledWith(query);
   });
 
-  it('findBySlug delegates to BlogsService.findBySlug', () => {
-    controller.findBySlug('my-slug');
+  it('findBySlug delegates to BlogsService.findBySlug', async () => {
+    await controller.findBySlug('my-slug');
 
     expect(blogsService.findBySlug).toHaveBeenCalledWith('my-slug');
   });
 
-  it('findPublished delegates to BlogsService.findPublished', () => {
+  it('findPublished delegates to BlogsService.findPublished', async () => {
     const query = { page: 1, limit: 10 } as ListBlogsQueryDto;
-    controller.findPublished(query);
+    await controller.findPublished(query);
 
     expect(blogsService.findPublished).toHaveBeenCalledWith(query);
   });
 
-  it('findOne delegates to BlogsService.findOne', () => {
-    controller.findOne('blog-id');
+  it('findOne delegates to BlogsService.findOne', async () => {
+    await controller.findOne('blog-id');
 
     expect(blogsService.findOne).toHaveBeenCalledWith('blog-id');
   });
 
-  it('listVersions delegates to BlogsService.listVersions', () => {
-    controller.listVersions('blog-id');
+  it('listVersions delegates to BlogsService.listVersions', async () => {
+    await controller.listVersions('blog-id');
 
     expect(blogsService.listVersions).toHaveBeenCalledWith('blog-id');
   });
 
-  it('rollback delegates to BlogsService.rollback with the current user', () => {
-    controller.rollback('blog-id', 'version-id', currentUser);
+  it('rollback delegates to BlogsService.rollback with the current user', async () => {
+    await controller.rollback('blog-id', 'version-id', currentUser);
 
     expect(blogsService.rollback).toHaveBeenCalledWith(
       'blog-id',
@@ -94,11 +94,15 @@ describe('BlogsController', () => {
     );
   });
 
-  it('update delegates to BlogsService.update with the current user', () => {
+  it('update delegates to BlogsService.update with the current user', async () => {
     const dto = { title: 'New Title' };
-    controller.update('blog-id', dto, currentUser);
+    await controller.update('blog-id', dto, currentUser);
 
-    expect(blogsService.update).toHaveBeenCalledWith('blog-id', dto, currentUser);
+    expect(blogsService.update).toHaveBeenCalledWith(
+      'blog-id',
+      dto,
+      currentUser,
+    );
   });
 
   it('remove delegates to BlogsService.remove and returns {}', async () => {

@@ -25,7 +25,8 @@ export class CreateBlogDto {
   title: string;
 
   @ApiPropertyOptional({
-    description: 'URL-friendly identifier. Auto-generated from title if omitted.',
+    description:
+      'URL-friendly identifier. Auto-generated from title if omitted.',
   })
   @IsOptional()
   @IsString()
@@ -51,7 +52,8 @@ export class CreateBlogDto {
   status?: BlogStatus;
 
   @ApiPropertyOptional({
-    description: 'Required (and must be in the future) when status is SCHEDULED.',
+    description:
+      'Required (and must be in the future) when status is SCHEDULED.',
   })
   @IsOptional()
   @IsISO8601()
@@ -74,7 +76,8 @@ export class CreateBlogDto {
   canonicalUrl?: string;
 
   @ApiPropertyOptional({
-    description: 'Post-content CTA card heading. Falls back to default site copy if omitted.',
+    description:
+      'Post-content CTA card heading. Falls back to default site copy if omitted.',
   })
   @IsOptional()
   @IsString()
@@ -124,7 +127,9 @@ export class CreateBlogDto {
   @IsBoolean()
   allowComments?: boolean;
 
-  @ApiPropertyOptional({ description: 'Id of an already-uploaded Media record.' })
+  @ApiPropertyOptional({
+    description: 'Id of an already-uploaded Media record.',
+  })
   @IsOptional()
   @IsUUID()
   featuredMediaId?: string;

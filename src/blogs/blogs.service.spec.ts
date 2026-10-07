@@ -23,6 +23,7 @@ describe('BlogsService', () => {
       findUnique: jest.Mock;
       count: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
     blogVersion: {
       create: jest.Mock;
@@ -75,6 +76,7 @@ describe('BlogsService', () => {
         findUnique: jest.fn(),
         count: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       blogVersion: {
         create: jest.fn(),
@@ -87,11 +89,13 @@ describe('BlogsService', () => {
       category: { count: jest.fn() },
       tag: { count: jest.fn() },
       media: { findUnique: jest.fn() },
-      rolePermission: { findFirst: jest.fn().mockResolvedValue({ id: 'grant-id' }) },
+      rolePermission: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'grant-id' }),
+      },
       $transaction: jest.fn(),
     };
-    prisma.$transaction.mockImplementation((callback: (tx: unknown) => unknown) =>
-      callback(prisma),
+    prisma.$transaction.mockImplementation(
+      (callback: (tx: unknown) => unknown) => callback(prisma),
     );
 
     configService = {
@@ -153,8 +157,16 @@ describe('BlogsService', () => {
           data: expect.objectContaining({
             faqs: {
               create: [
-                { question: 'What is EiceRise?', answer: 'A hospitality ERP.', position: 0 },
-                { question: 'Who is it for?', answer: 'Hotels in India.', position: 1 },
+                {
+                  question: 'What is EiceRise?',
+                  answer: 'A hospitality ERP.',
+                  position: 0,
+                },
+                {
+                  question: 'Who is it for?',
+                  answer: 'Hotels in India.',
+                  position: 1,
+                },
               ],
             },
           }),
@@ -213,7 +225,9 @@ describe('BlogsService', () => {
       ).resolves.toBeDefined();
 
       expect(prisma.blog.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ content: '' }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ content: '' }),
+        }),
       );
     });
 
@@ -221,7 +235,10 @@ describe('BlogsService', () => {
       prisma.blog.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.create({ title: dto.title, status: BlogStatus.PUBLISHED }, actor),
+        service.create(
+          { title: dto.title, status: BlogStatus.PUBLISHED },
+          actor,
+        ),
       ).rejects.toThrow(BadRequestException);
       expect(prisma.blog.create).not.toHaveBeenCalled();
     });
@@ -232,7 +249,12 @@ describe('BlogsService', () => {
 
       await expect(
         service.create(
-          { title: dto.title, content: '   ', status: BlogStatus.SCHEDULED, scheduledAt: futureDate },
+          {
+            title: dto.title,
+            content: '   ',
+            status: BlogStatus.SCHEDULED,
+            scheduledAt: futureDate,
+          },
           actor,
         ),
       ).rejects.toThrow(BadRequestException);
@@ -284,8 +306,12 @@ describe('BlogsService', () => {
 
       const result = await service.create(dto, actor);
 
-      expect(result.categories).toEqual([{ id: 'cat-1', name: 'Tech', slug: 'tech' }]);
-      expect(result.tags).toEqual([{ id: 'tag-1', name: 'NestJS', slug: 'nestjs' }]);
+      expect(result.categories).toEqual([
+        { id: 'cat-1', name: 'Tech', slug: 'tech' },
+      ]);
+      expect(result.tags).toEqual([
+        { id: 'tag-1', name: 'NestJS', slug: 'nestjs' },
+      ]);
       expect(result).not.toHaveProperty('categories.0.category');
     });
 
@@ -304,7 +330,10 @@ describe('BlogsService', () => {
         }),
       );
 
-      const result = await service.create({ ...dto, featuredMediaId: 'media-1' }, actor);
+      const result = await service.create(
+        { ...dto, featuredMediaId: 'media-1' },
+        actor,
+      );
 
       expect(result.featuredMedia).toEqual({
         id: 'media-1',
@@ -318,7 +347,9 @@ describe('BlogsService', () => {
 
     it('leaves featuredMedia null when there is no featured image', async () => {
       prisma.blog.findUnique.mockResolvedValue(null);
-      prisma.blog.create.mockResolvedValue(withRelations({ featuredMedia: null }));
+      prisma.blog.create.mockResolvedValue(
+        withRelations({ featuredMedia: null }),
+      );
 
       const result = await service.create(dto, actor);
 
@@ -346,7 +377,10 @@ describe('BlogsService', () => {
         prisma.blog.findUnique.mockResolvedValue(null);
         prisma.blog.create.mockResolvedValue(withRelations());
 
-        await service.create({ ...dto, excerpt: undefined, content: '# Title\nSome body text' }, actor);
+        await service.create(
+          { ...dto, excerpt: undefined, content: '# Title\nSome body text' },
+          actor,
+        );
 
         expect(prisma.blog.create).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -474,7 +508,9 @@ describe('BlogsService', () => {
   });
 
   describe('publishDueScheduledBlogs', () => {
-    it('queries only due, non-deleted SCHEDULED blogs', async () => {
+    const scheduledAt = new Date('2026-07-30T09:00:00.000Z');
+
+    it('queries only due, non-deleted SCHEDULED blogs, oldest first, capped', async () => {
       prisma.blog.findMany.mockResolvedValue([]);
 
       await service.publishDueScheduledBlogs();
@@ -486,33 +522,64 @@ describe('BlogsService', () => {
             scheduledAt: { lte: expect.any(Date) },
             deletedAt: null,
           },
+          orderBy: { scheduledAt: 'asc' },
+          take: 100,
         }),
       );
     });
 
-    it('publishes each due blog, using its own scheduledAt as publishedAt', async () => {
-      const scheduledAt = new Date('2026-07-30T09:00:00.000Z');
+    it('claims each due blog atomically, using its own scheduledAt as publishedAt', async () => {
       prisma.blog.findMany.mockResolvedValue([
         { id: 'blog-1', slug: 'first-post', scheduledAt },
         { id: 'blog-2', slug: 'second-post', scheduledAt },
       ]);
-      prisma.blog.update.mockImplementation(({ where }) =>
-        Promise.resolve({ id: where.id, slug: `${where.id}-slug` }),
-      );
+      prisma.blog.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.publishDueScheduledBlogs();
 
-      expect(prisma.blog.update).toHaveBeenCalledTimes(2);
-      expect(prisma.blog.update).toHaveBeenCalledWith({
-        where: { id: 'blog-1' },
+      expect(prisma.blog.updateMany).toHaveBeenCalledTimes(2);
+      expect(prisma.blog.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'blog-1',
+          status: BlogStatus.SCHEDULED,
+          scheduledAt,
+          deletedAt: null,
+        },
         data: {
           status: BlogStatus.PUBLISHED,
           publishedAt: scheduledAt,
           scheduledAt: null,
         },
-        select: { id: true, slug: true },
       });
-      expect(result).toHaveLength(2);
+      expect(result).toEqual([
+        { id: 'blog-1', slug: 'first-post' },
+        { id: 'blog-2', slug: 'second-post' },
+      ]);
+    });
+
+    it('skips a blog that was edited/claimed concurrently (count 0)', async () => {
+      prisma.blog.findMany.mockResolvedValue([
+        { id: 'blog-1', slug: 'first-post', scheduledAt },
+      ]);
+      prisma.blog.updateMany.mockResolvedValue({ count: 0 });
+
+      const result = await service.publishDueScheduledBlogs();
+
+      expect(result).toEqual([]);
+    });
+
+    it('isolates a failing blog and still publishes the rest', async () => {
+      prisma.blog.findMany.mockResolvedValue([
+        { id: 'blog-1', slug: 'first-post', scheduledAt },
+        { id: 'blog-2', slug: 'second-post', scheduledAt },
+      ]);
+      prisma.blog.updateMany
+        .mockRejectedValueOnce(new Error('db hiccup'))
+        .mockResolvedValueOnce({ count: 1 });
+
+      const result = await service.publishDueScheduledBlogs();
+
+      expect(result).toEqual([{ id: 'blog-2', slug: 'second-post' }]);
     });
 
     it('does nothing when no scheduled blogs are due', async () => {
@@ -520,7 +587,7 @@ describe('BlogsService', () => {
 
       const result = await service.publishDueScheduledBlogs();
 
-      expect(prisma.blog.update).not.toHaveBeenCalled();
+      expect(prisma.blog.updateMany).not.toHaveBeenCalled();
       expect(result).toEqual([]);
     });
   });
@@ -550,7 +617,10 @@ describe('BlogsService', () => {
     });
 
     it('increments views and returns the published blog', async () => {
-      const published = withRelations({ status: BlogStatus.PUBLISHED, views: 4 });
+      const published = withRelations({
+        status: BlogStatus.PUBLISHED,
+        views: 4,
+      });
       prisma.blog.findFirst.mockResolvedValue(published);
       prisma.blog.update.mockResolvedValue({});
 
@@ -576,7 +646,9 @@ describe('BlogsService', () => {
     it('creates a BlogVersion snapshot when content fields change', async () => {
       const existing = withRelations();
       prisma.blog.findFirst.mockResolvedValue(existing);
-      prisma.blog.update.mockResolvedValue(withRelations({ title: 'New Title' }));
+      prisma.blog.update.mockResolvedValue(
+        withRelations({ title: 'New Title' }),
+      );
 
       await service.update(existing.id, { title: 'New Title' }, actor);
 
@@ -633,7 +705,12 @@ describe('BlogsService', () => {
       });
       expect(prisma.blogFaq.createMany).toHaveBeenCalledWith({
         data: [
-          { blogId: existing.id, question: 'New question?', answer: 'New answer.', position: 0 },
+          {
+            blogId: existing.id,
+            question: 'New question?',
+            answer: 'New answer.',
+            position: 0,
+          },
         ],
       });
     });
@@ -684,7 +761,9 @@ describe('BlogsService', () => {
     it('allows publishing when new content is supplied in the same update', async () => {
       const existing = withRelations({ content: '' });
       prisma.blog.findFirst.mockResolvedValue(existing);
-      prisma.blog.update.mockResolvedValue(withRelations({ status: BlogStatus.PUBLISHED }));
+      prisma.blog.update.mockResolvedValue(
+        withRelations({ status: BlogStatus.PUBLISHED }),
+      );
 
       await expect(
         service.update(
@@ -732,11 +811,13 @@ describe('BlogsService', () => {
       expect(prisma.blog.update).not.toHaveBeenCalled();
     });
 
-    it('allows editing another author\'s blog when the actor has blogs:manage-all', async () => {
+    it("allows editing another author's blog when the actor has blogs:manage-all", async () => {
       const existing = withRelations({ authorId: 'someone-else-id' });
       prisma.blog.findFirst.mockResolvedValue(existing);
       prisma.rolePermission.findFirst.mockResolvedValue({ id: 'grant-id' });
-      prisma.blog.update.mockResolvedValue(withRelations({ title: 'New Title' }));
+      prisma.blog.update.mockResolvedValue(
+        withRelations({ title: 'New Title' }),
+      );
 
       await expect(
         service.update(existing.id, { title: 'New Title' }, actor),
@@ -754,11 +835,13 @@ describe('BlogsService', () => {
       expect(prisma.blog.update).not.toHaveBeenCalled();
     });
 
-    it('allows a DRAFT-only edit even without blogs:publish, on the actor\'s own blog', async () => {
+    it("allows a DRAFT-only edit even without blogs:publish, on the actor's own blog", async () => {
       const existing = withRelations();
       prisma.blog.findFirst.mockResolvedValue(existing);
       prisma.rolePermission.findFirst.mockResolvedValue(null);
-      prisma.blog.update.mockResolvedValue(withRelations({ title: 'New Title' }));
+      prisma.blog.update.mockResolvedValue(
+        withRelations({ title: 'New Title' }),
+      );
 
       await expect(
         service.update(existing.id, { title: 'New Title' }, actor),
@@ -851,7 +934,9 @@ describe('BlogsService', () => {
         content: 'Old content',
       });
       prisma.blog.findFirst.mockResolvedValue(existing);
-      prisma.blog.update.mockResolvedValue(withRelations({ title: 'Old Title' }));
+      prisma.blog.update.mockResolvedValue(
+        withRelations({ title: 'Old Title' }),
+      );
 
       await service.rollback(existing.id, 'version-1', actor);
 

@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -20,6 +21,8 @@ const MANAGE_ALL_BLOGS_PERMISSION = 'blogs:manage-all';
 const PUBLISH_BLOGS_PERMISSION = 'blogs:publish';
 
 const WORDS_PER_MINUTE = 200;
+// Upper bound per scheduler tick; anything beyond it is picked up next minute.
+const SCHEDULED_PUBLISH_BATCH_SIZE = 100;
 const SEO_TITLE_MAX_LENGTH = 60;
 const SEO_DESCRIPTION_MAX_LENGTH = 160;
 
@@ -49,7 +52,9 @@ const BLOG_INCLUDE = {
   faqs: { orderBy: { position: 'asc' } },
 } satisfies Prisma.BlogInclude;
 
-type BlogWithRelations = Prisma.BlogGetPayload<{ include: typeof BLOG_INCLUDE }>;
+type BlogWithRelations = Prisma.BlogGetPayload<{
+  include: typeof BLOG_INCLUDE;
+}>;
 
 interface StatusFields {
   status: BlogStatus;
@@ -65,6 +70,8 @@ function calculateReadingTime(content: string): number {
 
 @Injectable()
 export class BlogsService {
+  private readonly logger = new Logger(BlogsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
@@ -146,7 +153,9 @@ export class BlogsService {
     const where: Prisma.BlogWhereInput = {
       deletedAt: null,
       ...(status && { status }),
-      ...(category && { categories: { some: { category: { slug: category } } } }),
+      ...(category && {
+        categories: { some: { category: { slug: category } } },
+      }),
       ...(search && {
         OR: [
           { title: { contains: search, mode: 'insensitive' } },
@@ -182,10 +191,17 @@ export class BlogsService {
     return this.findAll({ ...query, status: BlogStatus.PUBLISHED });
   }
 
-  // Called on a timer (see BlogsSchedulerService) rather than at read-time,
-  // so a SCHEDULED post actually flips to PUBLISHED on its own instead of
-  // needing someone to manually reopen and re-save it.
-  async publishDueScheduledBlogs() {
+  // Called on a timer (see BlogsScheduler) rather than at read-time, so a
+  // SCHEDULED post actually flips to PUBLISHED on its own instead of needing
+  // someone to manually reopen and re-save it.
+  //
+  // Each blog is claimed with a conditional updateMany (status/scheduledAt
+  // re-checked in the WHERE), so a concurrent edit — an editor rescheduling or
+  // cancelling, or another app instance running the same tick — makes the
+  // claim a no-op instead of overwriting their change or publishing twice. A
+  // failure on one blog is logged and skipped; it is retried on the next tick
+  // and never blocks the others.
+  async publishDueScheduledBlogs(): Promise<{ id: string; slug: string }[]> {
     const due = await this.prisma.blog.findMany({
       where: {
         status: BlogStatus.SCHEDULED,
@@ -193,21 +209,40 @@ export class BlogsService {
         deletedAt: null,
       },
       select: { id: true, slug: true, scheduledAt: true },
+      orderBy: { scheduledAt: 'asc' },
+      take: SCHEDULED_PUBLISH_BATCH_SIZE,
     });
 
-    return Promise.all(
-      due.map((blog) =>
-        this.prisma.blog.update({
-          where: { id: blog.id },
+    const published: { id: string; slug: string }[] = [];
+
+    for (const blog of due) {
+      try {
+        const { count } = await this.prisma.blog.updateMany({
+          where: {
+            id: blog.id,
+            status: BlogStatus.SCHEDULED,
+            scheduledAt: blog.scheduledAt,
+            deletedAt: null,
+          },
           data: {
             status: BlogStatus.PUBLISHED,
             publishedAt: blog.scheduledAt,
             scheduledAt: null,
           },
-          select: { id: true, slug: true },
-        }),
-      ),
-    );
+        });
+
+        if (count > 0) {
+          published.push({ id: blog.id, slug: blog.slug });
+        }
+      } catch (error) {
+        this.logger.error(
+          `Failed to publish scheduled blog ${blog.id} (${blog.slug})`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
+
+    return published;
   }
 
   async findOne(id: string) {
@@ -308,7 +343,10 @@ export class BlogsService {
         await tx.blogCategory.deleteMany({ where: { blogId: id } });
         if (dto.categoryIds.length) {
           await tx.blogCategory.createMany({
-            data: dto.categoryIds.map((categoryId) => ({ blogId: id, categoryId })),
+            data: dto.categoryIds.map((categoryId) => ({
+              blogId: id,
+              categoryId,
+            })),
           });
         }
       }
@@ -425,7 +463,10 @@ export class BlogsService {
     return {
       ...blog,
       featuredMedia: blog.featuredMedia
-        ? { ...blog.featuredMedia, url: buildMediaUrl(this.configService, blog.featuredMedia.s3Key) }
+        ? {
+            ...blog.featuredMedia,
+            url: buildMediaUrl(this.configService, blog.featuredMedia.s3Key),
+          }
         : null,
       author: {
         ...blog.author,
@@ -519,7 +560,10 @@ export class BlogsService {
     return { seoTitle, seoDescription, canonicalUrl };
   }
 
-  private async hasPermission(roleId: string, permission: string): Promise<boolean> {
+  private async hasPermission(
+    roleId: string,
+    permission: string,
+  ): Promise<boolean> {
     const grant = await this.prisma.rolePermission.findFirst({
       where: { roleId, permission: { name: permission } },
     });
@@ -528,7 +572,9 @@ export class BlogsService {
 
   private async assertCanManageAllBlogs(roleId: string): Promise<void> {
     if (!(await this.hasPermission(roleId, MANAGE_ALL_BLOGS_PERMISSION))) {
-      throw new ForbiddenException('You can only edit or delete your own blogs.');
+      throw new ForbiddenException(
+        'You can only edit or delete your own blogs.',
+      );
     }
   }
 
@@ -559,7 +605,9 @@ export class BlogsService {
   }
 
   private async validateMediaExists(mediaId: string): Promise<void> {
-    const media = await this.prisma.media.findUnique({ where: { id: mediaId } });
+    const media = await this.prisma.media.findUnique({
+      where: { id: mediaId },
+    });
     if (!media) {
       throw new NotFoundException('Featured media not found.');
     }
