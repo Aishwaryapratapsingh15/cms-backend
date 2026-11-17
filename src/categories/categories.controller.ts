@@ -14,6 +14,7 @@ import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { ListCategoriesQueryDto } from './dto/list-categories-query.dto';
+import { MergeCategoryDto } from './dto/merge-category.dto';
 import { ResponseMessage } from '../common/decorators/response-message.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Audit } from '../audit/decorators/audit.decorator';
@@ -77,6 +78,24 @@ export class CategoriesController {
     @Body() dto: UpdateCategoryDto,
   ) {
     return this.categoriesService.update(id, dto);
+  }
+
+  @Post(':id/merge')
+  @Permissions('categories:update', 'categories:delete')
+  @Audit('Category', 'UPDATE')
+  @ResponseMessage('Categories merged successfully')
+  @ApiOperation({
+    summary:
+      'Merge this category into another: moves all its blogs to the target, then deletes it',
+  })
+  @ApiResponse({ status: 201, description: 'Target category with movedBlogs count.' })
+  @ApiResponse({ status: 400, description: 'Source and target are the same.' })
+  @ApiResponse({ status: 404, description: 'Source or target not found.' })
+  merge(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MergeCategoryDto,
+  ) {
+    return this.categoriesService.merge(id, dto.targetId);
   }
 
   @Delete(':id')

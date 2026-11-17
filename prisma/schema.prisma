@@ -215,6 +215,10 @@ model BlogFaq {
   @@map("blog_faqs")
 }
 
+// `name` is also protected by a case-insensitive unique index,
+// `categories_name_lower_key` ON (lower("name")) — created in raw SQL in
+// migration 20261111000000_enforce_unique_category_tag_names because Prisma
+// can't express expression indexes. Don't drop it when generating migrations.
 model Category {
   id      String @id @default(uuid())
   name    String
@@ -233,6 +237,7 @@ model Category {
   @@map("categories")
 }
 
+// Same raw-SQL case-insensitive unique index as Category: `tags_name_lower_key`.
 model Tag {
   id   String @id @default(uuid())
   name String

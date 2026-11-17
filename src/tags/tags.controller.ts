@@ -14,6 +14,7 @@ import { TagsService } from './tags.service';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
 import { ListTagsQueryDto } from './dto/list-tags-query.dto';
+import { MergeTagDto } from './dto/merge-tag.dto';
 import { ResponseMessage } from '../common/decorators/response-message.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Audit } from '../audit/decorators/audit.decorator';
@@ -64,6 +65,21 @@ export class TagsController {
   @ApiResponse({ status: 409, description: 'Slug already in use.' })
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateTagDto) {
     return this.tagsService.update(id, dto);
+  }
+
+  @Post(':id/merge')
+  @Permissions('tags:update', 'tags:delete')
+  @Audit('Tag', 'UPDATE')
+  @ResponseMessage('Tags merged successfully')
+  @ApiOperation({
+    summary:
+      'Merge this tag into another: moves all its blogs to the target, then deletes it',
+  })
+  @ApiResponse({ status: 201, description: 'Target tag with movedBlogs count.' })
+  @ApiResponse({ status: 400, description: 'Source and target are the same.' })
+  @ApiResponse({ status: 404, description: 'Source or target not found.' })
+  merge(@Param('id', ParseUUIDPipe) id: string, @Body() dto: MergeTagDto) {
+    return this.tagsService.merge(id, dto.targetId);
   }
 
   @Delete(':id')

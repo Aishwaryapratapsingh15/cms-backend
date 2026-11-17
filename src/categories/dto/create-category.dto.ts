@@ -6,9 +6,11 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
+import { NormalizeName } from '../../common/utils/name.util';
 
 export class CreateCategoryDto {
   @ApiProperty({ example: 'Web Development', maxLength: 150 })
+  @NormalizeName()
   @IsString()
   @IsNotEmpty()
   @MaxLength(150)
